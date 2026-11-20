@@ -3,6 +3,7 @@ name: Build Android app
 on:
   workflow_dispatch:        # "Run workflow" button on the Actions tab
   push:
+    branches: [main]        # every change pushed to main builds the app
     tags: ['v*']            # or push a tag like v1.0.1
 
 jobs:
