@@ -1,0 +1,12 @@
+{
+  "appId": "au.hvnetworkdriver.app",
+  "appName": "HV Network Driver",
+  "webDir": "www",
+  "android": {
+    "appendUserAgent": "HVNetworkDriver/1.0 (Android app)",
+    "backgroundColor": "#0f1418"
+  },
+  "plugins": {
+    "SystemBars": { "insetsHandling": "css", "style": "DARK" }
+  }
+}

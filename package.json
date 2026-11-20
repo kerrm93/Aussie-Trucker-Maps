@@ -1,0 +1,25 @@
+{
+  "name": "hv-network-driver",
+  "version": "1.0.0",
+  "description": "Heavy vehicle network companion for Australian truck drivers",
+  "scripts": {
+    "build": "python3 web-src/build.py",
+    "sync": "python3 web-src/build.py && npx cap sync android",
+    "open": "npx cap open android"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor-community/keep-awake": "^8.0.1",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "leaflet": "^1.9.4",
+    "proj4": "^2.23.0",
+    "sql.js": "^1.10.3"
+  },
+  "private": true
+}

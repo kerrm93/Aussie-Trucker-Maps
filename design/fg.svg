@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- road -->
+  <path d="M300 900 L460 430 L564 430 L724 900 Z" fill="#2a353e"/>
+  <path d="M512 455 L512 520 M512 580 L512 670 M512 740 L512 880" stroke="#ffb000" stroke-width="22" stroke-linecap="round"/>
+  <!-- truck -->
+  <g transform="translate(222 300)">
+    <rect x="0" y="40" width="380" height="200" rx="18" fill="#ffb000"/>
+    <path d="M392 90 h110 l78 82 v68 h-188 z" fill="#ffb000"/>
+    <path d="M415 110 h78 l52 56 h-130 z" fill="#0f1418"/>
+    <circle cx="95" cy="250" r="46" fill="#0f1418"/><circle cx="95" cy="250" r="20" fill="#ffb000"/>
+    <circle cx="470" cy="250" r="46" fill="#0f1418"/><circle cx="470" cy="250" r="20" fill="#ffb000"/>
+  </g>
+  <!-- check badge -->
+  <circle cx="742" cy="282" r="104" fill="#2fbf71" stroke="#0f1418" stroke-width="22"/>
+  <path d="M690 284 l36 38 l70 -78" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

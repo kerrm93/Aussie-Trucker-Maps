@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0f1418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>HV Network Driver</title>
+<style>/*LEAFLET_CSS*/</style>
+<style>
+:root{
+  --bg:#0f1418; --panel:#182027; --panel2:#212b33; --line:#2e3a44; --text:#eef2f4; --muted:#93a3ae;
+  --accent:#ffb000; --ok:#2fbf71; --bad:#ff4d4d; --warn:#ffb000; --info:#4aa3ff;
+  --safe-t:var(--safe-area-inset-top, env(safe-area-inset-top,0px)); --safe-b:var(--safe-area-inset-bottom, env(safe-area-inset-bottom,0px));
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+main{flex:1;position:relative;overflow:hidden}
+.view{position:absolute;inset:0;overflow-y:auto;display:none;padding:calc(14px + var(--safe-t)) 14px 24px}
+.view.active{display:block}
+#v-map{padding:0;overflow:hidden}
+#map{position:absolute;inset:0;background:#cfd6da}
+body.night .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+body.night #map{background:#1b2126}
+
+/* tab bar */
+nav{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+nav button{flex:1;background:none;border:0;padding:8px 2px 9px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:600;letter-spacing:.02em}
+nav button svg{width:26px;height:26px}
+nav button.active{color:var(--accent)}
+nav .dot{position:absolute;margin:-2px 0 0 18px;width:9px;height:9px;border-radius:50%;background:var(--bad);display:none}
+nav .dot.show{display:block}
+
+/* HUD */
+.hud{position:absolute;left:10px;right:10px;top:calc(10px + var(--safe-t));z-index:500;display:flex;gap:8px;align-items:flex-start;pointer-events:none}
+.hud > *{pointer-events:auto}
+.pill{background:rgba(15,20,24,.92);border:2px solid var(--line);border-radius:14px;padding:8px 12px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+#netPill{flex:1;min-width:0}
+#netPill .t{font-size:17px;line-height:1.2}
+#netPill .s{font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#netPill.ok{border-color:var(--ok)} #netPill.ok .t{color:var(--ok)}
+#netPill.bad{border-color:var(--bad);background:rgba(70,10,10,.94)} #netPill.bad .t{color:#ff8080}
+#netPill.none .t{color:var(--muted)}
+#speed{text-align:center;min-width:76px}
+#speed b{display:block;font-size:30px;line-height:1}
+#speed span{font-size:11px;color:var(--muted)}
+#routePill{position:absolute;left:10px;top:calc(84px + var(--safe-t));z-index:500;display:none}
+#routePill.on{display:block}
+#routePill.ok{border-color:var(--ok);color:var(--ok)}
+#routePill.bad{border-color:var(--bad);color:#ff8080;background:rgba(70,10,10,.94)}
+#fatPill{position:absolute;right:10px;top:calc(84px + var(--safe-t));z-index:500;display:none;font-size:14px}
+#fatPill.on{display:block}
+#fatPill.warn{border-color:var(--warn);color:var(--warn)}
+#fatPill.bad{border-color:var(--bad);color:#ff8080}
+.fab{position:absolute;right:12px;z-index:500;display:flex;flex-direction:column;gap:10px;bottom:16px}
+.fab button{width:54px;height:54px;border-radius:16px;border:2px solid var(--line);background:rgba(15,20,24,.92);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.fab button svg{width:26px;height:26px}
+.fab button.on{border-color:var(--accent);color:var(--accent)}
+#gpsMsg{position:absolute;left:10px;right:76px;bottom:16px;z-index:500;display:none;font-size:14px;font-weight:600}
+#gpsMsg.on{display:block}
+.me{width:30px;height:30px}
+.me svg{width:30px;height:30px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6))}
+
+/* panels */
+h1{font-size:22px;margin:4px 0 12px}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:22px 0 8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:13px 16px;font-weight:700;background:var(--panel2);border:1px solid var(--line);text-decoration:none;color:var(--text);min-height:50px}
+.btn.primary{background:var(--accent);color:#1a1300;border-color:var(--accent)}
+.btn.block{display:flex;width:100%}
+.btn.sm{min-height:38px;padding:7px 11px;font-size:14px;border-radius:10px}
+.btn.danger{color:#ff8080}
+.row{display:flex;gap:10px;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:block;font-size:13px;color:var(--muted);font-weight:600}
+label.f input,label.f select{display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 10px;font-size:17px}
+.layer{display:flex;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.layer:first-child{border-top:0}
+.layer .sw{width:22px;height:22px;border-radius:6px;flex:none;border:2px solid rgba(255,255,255,.25)}
+.layer .nm{flex:1;min-width:0}
+.layer .nm b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.layer select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px;font-size:13px}
+.tog{position:relative;width:50px;height:30px;flex:none}
+.tog input{opacity:0;width:0;height:0}
+.tog span{position:absolute;inset:0;border-radius:30px;background:var(--line);transition:.15s}
+.tog span:before{content:"";position:absolute;width:24px;height:24px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.15s}
+.tog input:checked + span{background:var(--ok)}
+.tog input:checked + span:before{transform:translateX(20px)}
+ol.steps{margin:6px 0 0;padding-left:20px} ol.steps li{margin:4px 0}
+.warnbox{border-left:4px solid var(--warn);background:rgba(255,176,0,.08);padding:10px 12px;border-radius:8px;font-size:14px}
+.chk{display:flex;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:15px}
+.chk:first-child{border-top:0}
+.chk i{font-style:normal;font-weight:800;width:22px;flex:none}
+.chk.ok i{color:var(--ok)} .chk.bad i{color:var(--bad)} .chk.na i{color:var(--muted)}
+a.link{color:var(--info)}
+.lnk{display:flex;align-items:center;gap:12px;padding:14px;margin-bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;color:var(--text);text-decoration:none}
+.lnk b{display:block}
+.lnk .ic{width:42px;height:42px;border-radius:12px;background:var(--panel2);display:grid;place-items:center;flex:none;color:var(--accent)}
+.lnk .ic svg{width:24px;height:24px}
+
+/* fatigue */
+#fatStatus{text-align:center;padding:18px 14px}
+#fatStatus .st{font-size:28px;font-weight:800}
+#fatStatus .since{color:var(--muted);font-weight:600}
+#fatStatus .next{margin-top:12px;font-size:18px;font-weight:700}
+#fatStatus.work .st{color:var(--accent)}
+#fatStatus.rest .st{color:var(--ok)}
+#fatStatus.off .st{color:var(--muted)}
+.bigbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.bigbtns .btn{min-height:72px;font-size:19px}
+.bigbtns .btn.work{background:var(--accent);color:#1a1300;border-color:var(--accent)}
+.bigbtns .btn.rest{background:var(--ok);color:#03200f;border-color:var(--ok)}
+.bigbtns .btn[disabled]{opacity:.35}
+table.rules{width:100%;border-collapse:collapse;font-size:14px}
+table.rules th{text-align:left;color:var(--muted);font-weight:600;padding:6px 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+table.rules td{padding:9px 4px;border-top:1px solid var(--line)}
+table.rules td.r{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+td.ok{color:var(--ok)} td.warn{color:var(--warn)} td.bad{color:var(--bad)}
+.bar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%;background:var(--accent)}
+.log{font-size:14px;font-variant-numeric:tabular-nums}
+.log div{display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)}
+
+/* toast + modal */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + var(--safe-b));z-index:2000;background:#000;color:#fff;padding:11px 16px;border-radius:12px;font-weight:600;font-size:15px;max-width:90vw;display:none;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+#toast.on{display:block}
+.introbg{position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;padding:18px}
+.introbg.on{display:flex}
+.introcard{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px;max-width:440px;width:100%;max-height:90vh;overflow:auto}
+#busy{position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.6);display:none;place-items:center;font-weight:700;font-size:17px}
+#busy.on{display:grid}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#182027;color:var(--text)}
+.leaflet-popup-content{margin:12px 14px;font-size:14px;max-height:45vh;overflow:auto}
+.leaflet-popup-content table{border-collapse:collapse}
+.leaflet-popup-content td{padding:2px 6px 2px 0;vertical-align:top;border-top:1px solid var(--line)}
+.leaflet-popup-content td:first-child{color:var(--muted)}
+.leaflet-container a.leaflet-popup-close-button{color:#ccc}
+.leaflet-control-attribution{font-size:10px}
+.leaflet-bar a{width:40px;height:40px;line-height:40px}
+</style>
+</head>
+<body>
+<div id="app">
+<main>
+  <!-- MAP -->
+  <section class="view active" id="v-map">
+    <div id="map"></div>
+    <div class="hud">
+      <div class="pill none" id="netPill"><div class="t">No network loaded</div><div class="s">Import NHVR network data in Layers</div></div>
+      <div class="pill" id="speed"><b>–</b><span>km/h</span></div>
+    </div>
+    <div class="pill" id="routePill"></div>
+    <div class="pill" id="fatPill"></div>
+    <div class="pill" id="gpsMsg"></div>
+    <div class="fab">
+      <button id="btnNight" title="Night map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+      <button id="btnWake" title="Keep screen on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></button>
+      <button id="btnFollow" title="Follow my position"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+    </div>
+  </section>
+
+  <!-- LAYERS -->
+  <section class="view" id="v-layers">
+    <h1>Network &amp; route layers</h1>
+    <label class="btn primary block" for="file"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg>Import file</label>
+    <input type="file" id="file" accept=".gpkg,.geojson,.json,.kml,.gpx,application/geopackage+sqlite3,application/vnd.google-earth.kml+xml,application/gpx+xml" multiple hidden>
+    <p class="small muted" style="margin:8px 2px 0">GeoPackage (.gpkg) from the National Network Map, KML / GPX routes from the Route Planner, or GeoJSON. Files stay on this phone and work without signal.</p>
+    <div class="card" id="layerList" style="margin-top:14px"></div>
+
+    <h2>Get network data (.gpkg)</h2>
+    <div class="card small">
+      <ol class="steps">
+        <li>Open the <a class="link" href="https://maps.nhvr.gov.au/?view=Category&amp;viewBy=Networks" target="_blank" rel="noopener">NHVR National Network Map</a>.</li>
+        <li>Use <b>View by → Networks</b> and pick the state.</li>
+        <li>Select the network for your vehicle (e.g. B-double, Road train, PBS) and tap the <b>?</b> icon.</li>
+        <li>Tap <b>Download Network</b>. A .gpkg file is saved to your downloads.</li>
+        <li>Come back here, tap <b>Import file</b> and choose it. Set its role to <b>Network</b>.</li>
+      </ol>
+    </div>
+    <h2>Get a planned route (.kml / .gpx)</h2>
+    <div class="card small">
+      <ol class="steps">
+        <li>Plan the trip in the NHVR <a class="link" href="https://www.service.nhvr.gov.au/" target="_blank" rel="noopener">Route Planner</a> (Portal → Information Hub → Route Planner, no login needed).</li>
+        <li>Use <b>Download route</b> and choose KML or GPX.</li>
+        <li>Import it here. Its role becomes <b>Route</b>, and you get an off-route alert while driving.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- TRUCK -->
+  <section class="view" id="v-truck">
+    <h1>My vehicle</h1>
+    <div class="card">
+      <div class="grid2">
+        <label class="f" style="grid-column:1/-1">Rego / unit<input id="t_rego" placeholder="e.g. 123-ABC"></label>
+        <label class="f" style="grid-column:1/-1">Combination
+          <select id="t_type">
+            <option value="rigid">Rigid truck</option>
+            <option value="semi">Prime mover + semi-trailer</option>
+            <option value="truckdog">Truck and dog</option>
+            <option value="bdouble">B-double</option>
+            <option value="btriple">B-triple</option>
+            <option value="rt1">Road train type 1 (A-double)</option>
+            <option value="rt2">Road train type 2 (A-triple)</option>
+            <option value="pbs">PBS vehicle</option>
+            <option value="osom">OSOM (oversize / overmass)</option>
+            <option value="spv">Special purpose vehicle</option>
+          </select>
+        </label>
+        <label class="f">Mass scheme
+          <select id="t_mass"><option>GML</option><option>CML</option><option>HML</option></select>
+        </label>
+        <label class="f">PBS level
+          <select id="t_pbs"><option value="">n/a</option><option>1</option><option>2A</option><option>2B</option><option>3A</option><option>3B</option><option>4A</option><option>4B</option></select>
+        </label>
+        <label class="f">Height (m)<input id="t_h" type="number" inputmode="decimal" step="0.01" placeholder="4.30"></label>
+        <label class="f">Width (m)<input id="t_w" type="number" inputmode="decimal" step="0.01" placeholder="2.50"></label>
+        <label class="f">Length (m)<input id="t_l" type="number" inputmode="decimal" step="0.1" placeholder="19.0"></label>
+        <label class="f">Gross mass (t)<input id="t_m" type="number" inputmode="decimal" step="0.1" placeholder="42.5"></label>
+      </div>
+    </div>
+    <h2>General access check</h2>
+    <div class="card" id="gaCheck"></div>
+    <div class="card small">
+      <b>Networks to download for this vehicle</b>
+      <div id="netAdvice" class="muted" style="margin-top:6px"></div>
+      <a class="btn sm" style="margin-top:10px" href="https://maps.nhvr.gov.au/?view=Category&amp;viewBy=Networks" target="_blank" rel="noopener">Open National Network Map ↗</a>
+    </div>
+    <p class="small muted">General access dimension limits shown are the standard national reference values. Notices, permits and state rules can change them, so always check the network, notice or permit for your trip.</p>
+  </section>
+
+  <!-- FATIGUE -->
+  <section class="view" id="v-fatigue">
+    <h1>Fatigue: Standard Hours (solo)</h1>
+    <div class="card" id="fatStatus"></div>
+    <div class="bigbtns">
+      <button class="btn work" id="fWork">Start work</button>
+      <button class="btn rest" id="fRest">Start rest</button>
+    </div>
+    <div class="card">
+      <table class="rules"><thead><tr><th>In any…</th><th>Work used</th><th class="r">Left</th></tr></thead><tbody id="fatRules"></tbody></table>
+      <div class="small muted" style="margin-top:8px" id="fatLong"></div>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><b>Today's log</b>
+        <span class="row" style="gap:6px"><button class="btn sm" id="fUndo">Undo last</button><button class="btn sm danger" id="fClear">Clear</button></span>
+      </div>
+      <div class="log" id="fatLog" style="margin-top:8px"></div>
+    </div>
+    <div class="warnbox">This is a timer to help you plan breaks. It is <b>not</b> a work diary and does not replace your National Driver Work Diary or EWD. Rest under 15 minutes in a row is counted as work. Check BFM, AFM or exemption hours with your operator.</div>
+    <div style="height:10px"></div>
+    <div id="confirmClear" style="display:none">
+      <div class="card"><b>Clear the whole log?</b><div class="row" style="margin-top:10px"><button class="btn sm danger" id="fClearYes">Yes, clear</button><button class="btn sm" id="fClearNo">Cancel</button></div></div>
+    </div>
+  </section>
+
+  <!-- NHVR -->
+  <section class="view" id="v-nhvr">
+    <h1>NHVR Go</h1>
+    <a class="lnk" href="https://maps.nhvr.gov.au/?view=Category&amp;viewBy=Networks" target="_blank" rel="noopener"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg></span><span><b>National Network Map</b><span class="small muted">Approved heavy vehicle networks by state and vehicle type</span></span></a>
+    <a class="lnk" href="https://www.service.nhvr.gov.au/" target="_blank" rel="noopener"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg></span><span><b>NHVR Go portal &amp; Route Planner</b><span class="small muted">Plan routes, permits, Information Hub</span></span></a>
+    <a class="lnk" href="https://support.nhvr.gov.au/en/articles/12687520-how-to-download-nhvr-network-data" target="_blank" rel="noopener"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg></span><span><b>How to download network data</b><span class="small muted">NHVR help article (GeoPackage export)</span></span></a>
+    <a class="lnk" href="https://support.nhvr.gov.au/en/articles/6102821-route-planner-download-route" target="_blank" rel="noopener"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg></span><span><b>How to download a route (KML/GPX)</b><span class="small muted">NHVR help article</span></span></a>
+    <a class="lnk" href="https://www.nhvr.gov.au/" target="_blank" rel="noopener"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span><span><b>nhvr.gov.au</b><span class="small muted">Notices, fatigue, mass &amp; dimension rules</span></span></a>
+    <div class="card small muted">The "on network" check only knows about the files you've imported. Network data changes often, so download it again before long trips. When a gazetted notice, permit or road sign says something different, follow that.</div>
+    <p class="small muted">Map © OpenStreetMap contributors. Network data © NHVR and road managers. This app isn't made by or affiliated with the NHVR.</p>
+  </section>
+</main>
+
+<nav>
+  <button data-v="map" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Map</button>
+  <button data-v="layers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg>Layers</button>
+  <button data-v="truck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 6h11v10H2zM13 9h4l4 4v3h-8"/><circle cx="6" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Vehicle</button>
+  <button data-v="fatigue"><span class="dot" id="fatDot"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>Fatigue</button>
+  <button data-v="nhvr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>NHVR</button>
+</nav>
+</div>
+<div id="toast"></div>
+<div id="intro" class="introbg"><div class="introcard">
+  <h1 style="margin-top:0">Welcome</h1>
+  <p><b>HV Network Driver uses your location while the app is open</b> to:</p>
+  <ul style="padding-left:20px;margin:6px 0 10px">
+    <li>show whether you're on a heavy vehicle network you've loaded</li>
+    <li>warn you if you leave your planned route</li>
+    <li>show your speed and position on the map</li>
+  </ul>
+  <p class="small muted">Your location stays on this phone. It isn't stored or sent to us. Only map images are downloaded for the area you're viewing.</p>
+  <p class="small muted">This app isn't made by or affiliated with the NHVR. Always follow road signs, notices and permits.</p>
+  <button class="btn primary block" id="introOk">Continue</button>
+</div></div>
+<div id="busy"><div id="busyTxt">Loading…</div></div>
+
+<script>/*CAPACITOR_JS*/</script>
+<script>/*LEAFLET_JS*/</script>
+<script>/*PROJ4_JS*/</script>
+<script>/*SQLJS_JS*/</script>
+<script type="application/octet-stream" id="sqlwasm">__SQL_WASM_B64__</script>
+<script>
+"use strict";
+/* ---------- utilities ---------- */
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('hvnd.'+k); return v==null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('hvnd.'+k, JSON.stringify(v)); }catch(e){} }
+};
+function toast(msg, ms=2600){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toast._h); toast._h=setTimeout(()=>t.classList.remove('on'), ms); }
+function busy(on, txt){ $('#busy').classList.toggle('on', !!on); if(txt) $('#busyTxt').textContent = txt; }
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDur = ms => { const neg = ms<0; ms=Math.abs(ms); const m=Math.round(ms/60000); const h=Math.floor(m/60), mm=m%60; return (neg?'-':'')+(h? h+'h '+String(mm).padStart(2,'0')+'m' : mm+'m'); };
+const fmtTime = t => new Date(t).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
+const fmtDist = m => m < 1000 ? Math.round(m)+' m' : (m/1000).toFixed(m<10000?1:0)+' km';
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => showView(b.dataset.v));
+function showView(v){
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.v===v));
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('active', s.id==='v-'+v));
+  if(v==='map') setTimeout(()=>map.invalidateSize(), 50);
+  if(v==='fatigue') renderFatigue();
+}
+
+/* ---------- map ---------- */
+const last = store.get('lastView', {c:[-25.6,134.4], z:4});
+const map = L.map('map', {zoomControl:false, preferCanvas:true, attributionControl:true}).setView(last.c, last.z);
+L.control.zoom({position:'bottomleft'}).addTo(map);
+/* Map tiles. For a published app, put your MapTiler (or other provider) key here:
+   OpenStreetMap's own tile servers don't allow distributed apps without permission. */
+const MAPTILER_KEY = '__MAPTILER_KEY__';
+const hasKey = MAPTILER_KEY && !MAPTILER_KEY.startsWith('__');
+L.tileLayer(hasKey ? 'https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key='+MAPTILER_KEY : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19, attribution: hasKey ? '© MapTiler © OpenStreetMap contributors' : '© OpenStreetMap contributors'}).addTo(map);
+const canvas = L.canvas({padding:0.5, tolerance:8});
+map.on('moveend', () => store.set('lastView', {c:[map.getCenter().lat, map.getCenter().lng], z:map.getZoom()}));
+
+let night = store.get('night', false);
+function applyNight(){ document.body.classList.toggle('night', night); $('#btnNight').classList.toggle('on', night); }
+$('#btnNight').onclick = () => { night=!night; store.set('night', night); applyNight(); };
+applyNight();
+
+/* ---------- geometry helpers ---------- */
+const R = 6371008.8, D2R = Math.PI/180;
+function haversine(a, b){ // [lon,lat]
+  const dLat=(b[1]-a[1])*D2R, dLon=(b[0]-a[0])*D2R;
+  const s=Math.sin(dLat/2)**2+Math.cos(a[1]*D2R)*Math.cos(b[1]*D2R)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+function distPtSeg(p, a, b){ // local equirectangular, metres
+  const kx = Math.cos(p[1]*D2R)*111320, ky = 110574;
+  const ax=(a[0]-p[0])*kx, ay=(a[1]-p[1])*ky, bx=(b[0]-p[0])*kx, by=(b[1]-p[1])*ky;
+  const dx=bx-ax, dy=by-ay, L2=dx*dx+dy*dy;
+  let t = L2 ? -(ax*dx+ay*dy)/L2 : 0; t = Math.max(0, Math.min(1, t));
+  const x=ax+t*dx, y=ay+t*dy; return Math.sqrt(x*x+y*y);
+}
+function pointInRing(p, ring){
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const xi=ring[i][0], yi=ring[i][1], xj=ring[j][0], yj=ring[j][1];
+    if(((yi>p[1])!==(yj>p[1])) && (p[0] < (xj-xi)*(p[1]-yi)/(yj-yi)+xi)) inside=!inside;
+  }
+  return inside;
+}
+function pointInPolygon(p, rings){ if(!pointInRing(p, rings[0])) return false; for(let i=1;i<rings.length;i++) if(pointInRing(p, rings[i])) return false; return true; }
+
+/* Spatial index per layer: grid of line segments + polygons list */
+const CELL = 0.02;
+function buildIndex(fc){
+  const grid = new Map(); const polys = []; let nseg = 0;
+  const add = (k, s) => { let a = grid.get(k); if(!a) grid.set(k, a=[]); a.push(s); };
+  const addLine = (coords, fi) => {
+    for(let i=1;i<coords.length;i++){
+      const a=coords[i-1], b=coords[i]; const seg=[a,b,fi]; nseg++;
+      const x0=Math.floor(Math.min(a[0],b[0])/CELL), x1=Math.floor(Math.max(a[0],b[0])/CELL);
+      const y0=Math.floor(Math.min(a[1],b[1])/CELL), y1=Math.floor(Math.max(a[1],b[1])/CELL);
+      if((x1-x0+1)*(y1-y0+1) > 400){ add('big', seg); continue; }
+      for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++) add(x+','+y, seg);
+    }
+  };
+  fc.features.forEach((f, fi) => {
+    const g=f.geometry; if(!g) return;
+    const walk = g => {
+      switch(g.type){
+        case 'LineString': addLine(g.coordinates, fi); break;
+        case 'MultiLineString': g.coordinates.forEach(c=>addLine(c, fi)); break;
+        case 'Polygon': polys.push({rings:g.coordinates, fi, bb:bbox(g.coordinates[0])}); break;
+        case 'MultiPolygon': g.coordinates.forEach(r=>polys.push({rings:r, fi, bb:bbox(r[0])})); break;
+        case 'GeometryCollection': g.geometries.forEach(walk); break;
+      }
+    };
+    walk(g);
+  });
+  return {grid, polys, nseg};
+}
+function bbox(ring){ let a=[Infinity,Infinity,-Infinity,-Infinity]; for(const c of ring){ if(c[0]<a[0])a[0]=c[0]; if(c[1]<a[1])a[1]=c[1]; if(c[0]>a[2])a[2]=c[0]; if(c[1]>a[3])a[3]=c[1]; } return a; }
+function queryIndex(idx, p, maxM){ // returns {d, fi} nearest within search, or polygon hit d=0
+  for(const pg of idx.polys){ const b=pg.bb; if(p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3]&&pointInPolygon(p,pg.rings)) return {d:0, fi:pg.fi, poly:true}; }
+  const cx=Math.floor(p[0]/CELL), cy=Math.floor(p[1]/CELL); const r = maxM > 1500 ? Math.ceil(maxM/2000) : 1;
+  let best={d:Infinity, fi:-1};
+  const test = arr => { if(arr) for(const s of arr){ const d=distPtSeg(p,s[0],s[1]); if(d<best.d){ best={d, fi:s[2]}; } } };
+  for(let x=cx-r;x<=cx+r;x++) for(let y=cy-r;y<=cy+r;y++) test(idx.grid.get(x+','+y));
+  test(idx.grid.get('big'));
+  return best;
+}
+
+/* ---------- layers (IndexedDB) ---------- */
+const COLORS = ['#ff7a00','#00b3ff','#e83fff','#2fbf71','#ffd400','#ff4d6d','#7c5cff','#00d4b4'];
+let layers = []; // {id,name,role,color,visible,fc, leaf, idx}
+let dbp = null;
+function idb(){
+  if(dbp) return dbp;
+  dbp = new Promise((res, rej) => {
+    if(!('indexedDB' in window)) return rej(new Error('no idb'));
+    const r = indexedDB.open('hv-network-driver', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('layers', {keyPath:'id'});
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  return dbp;
+}
+async function idbPut(rec){ try{ const db=await idb(); await new Promise((res,rej)=>{ const tx=db.transaction('layers','readwrite'); tx.objectStore('layers').put(rec); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }catch(e){ console.warn(e); toast('Could not save layer for offline use'); } }
+async function idbDel(id){ try{ const db=await idb(); db.transaction('layers','readwrite').objectStore('layers').delete(id); }catch(e){} }
+async function idbAll(){ try{ const db=await idb(); return await new Promise((res,rej)=>{ const r=db.transaction('layers').objectStore('layers').getAll(); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }catch(e){ return []; } }
+const meta = l => ({id:l.id, name:l.name, role:l.role, color:l.color, visible:l.visible, fc:l.fc});
+
+function popupHtml(props, title){
+  const keys = Object.keys(props||{}).filter(k => props[k]!=null && props[k]!=='' && typeof props[k] !== 'object');
+  let h = '<b>'+esc(title)+'</b>';
+  if(keys.length) h += '<table>'+keys.slice(0,30).map(k=>'<tr><td>'+esc(k)+'</td><td>'+esc(props[k])+'</td></tr>').join('')+'</table>';
+  return h;
+}
+function addLayerToMap(l){
+  const isRoute = l.role==='route';
+  l.leaf = L.geoJSON(l.fc, {
+    renderer: canvas,
+    style: () => ({color:l.color, weight: isRoute?7:4, opacity: isRoute?.85:.8, fillColor:l.color, fillOpacity:.12}),
+    pointToLayer: (f, ll) => L.circleMarker(ll, {renderer:canvas, radius:6, color:'#000', weight:1.5, fillColor:l.color, fillOpacity:1}),
+    onEachFeature: (f, lyr) => lyr.on('click', e => { L.DomEvent.stopPropagation(e); L.popup().setLatLng(e.latlng).setContent(popupHtml(f.properties, l.name)).openOn(map); })
+  });
+  l.idx = buildIndex(l.fc);
+  if(l.visible) l.leaf.addTo(map);
+}
+function setVisible(l, v){ l.visible=v; if(v) l.leaf.addTo(map); else map.removeLayer(l.leaf); if(l.role==='route') bringRoutesFront(); idbPut(meta(l)); renderLayers(); updateStatus(); }
+function bringRoutesFront(){ layers.filter(x=>x.role==='route'&&x.visible).forEach(x=>x.leaf.bringToFront()); }
+function removeLayer(l){ if(l.leaf) map.removeLayer(l.leaf); layers = layers.filter(x=>x!==l); idbDel(l.id); renderLayers(); updateStatus(); }
+function setRole(l, role){ l.role=role; map.removeLayer(l.leaf); addLayerToMap(l); bringRoutesFront(); idbPut(meta(l)); renderLayers(); updateStatus(); }
+
+function renderLayers(){
+  const el = $('#layerList');
+  if(!layers.length){ el.innerHTML = '<div class="muted small">No layers yet. Import a network GeoPackage or a route file to get started.</div>'; return; }
+  el.innerHTML = '';
+  layers.forEach(l => {
+    const n = l.fc.features.length;
+    const d = document.createElement('div'); d.className='layer';
+    d.innerHTML = `<span class="sw" style="background:${l.color}"></span>
+      <div class="nm"><b>${esc(l.name)}</b><span class="small muted">${n.toLocaleString()} feature${n===1?'':'s'}</span>
+        <div class="row" style="gap:6px;margin-top:6px">
+          <select><option value="network">Network</option><option value="route">Route</option><option value="other">Other</option></select>
+          <button class="btn sm" data-a="zoom">Zoom</button><button class="btn sm danger" data-a="del">Delete</button>
+        </div></div>
+      <label class="tog"><input type="checkbox" ${l.visible?'checked':''}><span></span></label>`;
+    const sel = d.querySelector('select'); sel.value = l.role; sel.onchange = () => setRole(l, sel.value);
+    d.querySelector('input').onchange = e => setVisible(l, e.target.checked);
+    d.querySelector('[data-a=zoom]').onclick = () => { try{ const b=l.leaf.getBounds(); if(b.isValid()){ showView('map'); setTimeout(()=>{ following=false; updFollowBtn(); map.fitBounds(b, {padding:[30,30]}); },80); } }catch(e){} };
+    d.querySelector('[data-a=del]').onclick = () => { if(d.dataset.confirm){ removeLayer(l); } else { d.dataset.confirm=1; const b=d.querySelector('[data-a=del]'); b.textContent='Tap again to delete'; setTimeout(()=>{ if(b.isConnected){ delete d.dataset.confirm; b.textContent='Delete'; } }, 3000); } };
+    el.appendChild(d);
+  });
+}
+
+/* ---------- parsers ---------- */
+let sqlP = null;
+function getSql(){
+  if(!sqlP){
+    const b64 = document.getElementById('sqlwasm').textContent.trim();
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    sqlP = initSqlJs({wasmBinary: bin});
+  }
+  return sqlP;
+}
+// common Australian CRS definitions
+(function(){
+  for(let z=46; z<=59; z++){
+    const def = `+proj=utm +zone=${z} +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`;
+    proj4.defs('EPSG:'+(28300+z), def);  // GDA94 / MGA
+    proj4.defs('EPSG:'+(7800+z), def);   // GDA2020 / MGA
+  }
+  const albers = '+proj=aea +lat_0=0 +lon_0=132 +lat_1=-18 +lat_2=-36 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs';
+  proj4.defs('EPSG:3577', albers); proj4.defs('EPSG:9473', albers);
+  const lcc = '+proj=lcc +lat_0=0 +lon_0=134 +lat_1=-18 +lat_2=-36 +x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs';
+  proj4.defs('EPSG:3112', lcc); proj4.defs('EPSG:7845', lcc);
+  proj4.defs('EPSG:3308', '+proj=lcc +lat_0=-32.7 +lon_0=147 +lat_1=-30.75 +lat_2=-35.75 +x_0=9300000 +y_0=4500000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs'); // NSW Lambert
+  proj4.defs('EPSG:3111', '+proj=lcc +lat_0=-37 +lon_0=145 +lat_1=-36 +lat_2=-38 +x_0=2500000 +y_0=2500000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs'); // Vicgrid
+  proj4.defs('EPSG:7899', '+proj=lcc +lat_0=-37 +lon_0=145 +lat_1=-36 +lat_2=-38 +x_0=2500000 +y_0=2500000 +ellps=GRS80 +units=m +no_defs'); // Vicgrid GDA2020
+})();
+const GEOG = new Set([4326,4283,7844,4939,4979,4167,4202,4203,7843,4978]);
+function makeTransform(org, code, def){
+  code = +code;
+  if((org||'').toUpperCase()==='EPSG' && GEOG.has(code)) return null;
+  if(code===3857 || code===900913 || code===3785) { const A=6378137; return c => [c[0]/A/D2R, (2*Math.atan(Math.exp(c[1]/A)) - Math.PI/2)/D2R]; }
+  let p = null;
+  try{ if(proj4.defs('EPSG:'+code)) p = proj4('EPSG:'+code, 'EPSG:4326'); }catch(e){}
+  if(!p && def && def !== 'undefined'){
+    if(/^\s*GEOGCS|^\s*GEOGCRS|^\s*GEODCRS/i.test(def)) return null;
+    try{ p = proj4(def, 'EPSG:4326'); }catch(e){}
+  }
+  if(!p) return 'unknown';
+  return c => p.forward([c[0], c[1]]);
+}
+function readWkb(dv, off, tf){
+  const le = dv.getUint8(off) === 1; off += 1;
+  let type = dv.getUint32(off, le); off += 4;
+  let dims = 2;
+  if(type & 0x20000000){ off += 4; }                 // EWKB SRID
+  if(type & 0x80000000) dims++; if(type & 0x40000000) dims++;
+  type &= 0x0fffffff;
+  if(type >= 1000){ const k = Math.floor(type/1000); dims = k===3 ? 4 : 3; type %= 1000; }
+  const pt = () => { const x=dv.getFloat64(off, le), y=dv.getFloat64(off+8, le); off += 8*dims; return tf ? tf([x,y]) : [x,y]; };
+  const pts = () => { const n=dv.getUint32(off, le); off+=4; const a=new Array(n); for(let i=0;i<n;i++) a[i]=pt(); return a; };
+  const rings = () => { const n=dv.getUint32(off, le); off+=4; const a=[]; for(let i=0;i<n;i++) a.push(pts()); return a; };
+  const multi = () => { const n=dv.getUint32(off, le); off+=4; const a=[]; for(let i=0;i<n;i++){ const r=readWkb(dv, off, tf); off=r.off; a.push(r.g); } return a; };
+  let g;
+  switch(type){
+    case 1: { const c = pt(); g = isNaN(c[0]) ? null : {type:'Point', coordinates:c}; break; }
+    case 2: g = {type:'LineString', coordinates:pts()}; break;
+    case 3: g = {type:'Polygon', coordinates:rings()}; break;
+    case 4: g = {type:'MultiPoint', coordinates:multi().filter(Boolean).map(x=>x.coordinates)}; break;
+    case 5: g = {type:'MultiLineString', coordinates:multi().map(x=>x.coordinates)}; break;
+    case 6: g = {type:'MultiPolygon', coordinates:multi().map(x=>x.coordinates)}; break;
+    case 7: g = {type:'GeometryCollection', geometries:multi().filter(Boolean)}; break;
+    case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17:
+      throw new Error('Curved / surface geometry type '+type+' is not supported');
+    default: throw new Error('Unknown WKB type '+type);
+  }
+  return {g, off};
+}
+function parseGpkgGeom(u8, tf){
+  if(!u8 || u8.length < 8) return null;
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  if(u8[0]!==0x47 || u8[1]!==0x50) return readWkb(dv, 0, tf).g; // plain WKB fallback
+  const flags = u8[3];
+  if(flags & 0x10) return null; // empty
+  const env = [0,32,48,48,64][(flags>>1)&7] || 0;
+  return readWkb(dv, 8+env, tf).g;
+}
+function inAus(c){ return c && c[0]>95 && c[0]<175 && c[1]>-55 && c[1]<-5; }
+function firstCoord(g){ if(!g) return null; let c=g.coordinates; if(g.type==='GeometryCollection') return firstCoord(g.geometries[0]); while(Array.isArray(c) && Array.isArray(c[0])) c=c[0]; return c; }
+
+async function parseGpkg(buf){
+  const SQL = await getSql();
+  const db = new SQL.Database(new Uint8Array(buf));
+  try{
+    const gc = db.exec("SELECT table_name, column_name, srs_id FROM gpkg_geometry_columns");
+    if(!gc.length || !gc[0].values.length) throw new Error('No geometry tables found in this GeoPackage');
+    const out = [];
+    for(const [table, col, srs] of gc[0].values){
+      let org='EPSG', code=srs, def=null;
+      try{ const r = db.exec("SELECT organization, organization_coordsys_id, definition FROM gpkg_spatial_ref_sys WHERE srs_id="+(+srs)); if(r.length&&r[0].values.length){ [org, code, def] = r[0].values[0]; } }catch(e){}
+      let tf = makeTransform(org, code, def);
+      const unknownCrs = tf === 'unknown'; if(unknownCrs) tf = null;
+      const features = [];
+      const st = db.prepare('SELECT * FROM "'+String(table).replace(/"/g,'""')+'"');
+      let bad = 0;
+      while(st.step()){
+        const row = st.getAsObject();
+        const blob = row[col]; delete row[col];
+        for(const k in row){ if(row[k] instanceof Uint8Array) delete row[k]; }
+        let g=null; try{ g = parseGpkgGeom(blob, tf); }catch(e){ bad++; }
+        if(g) features.push({type:'Feature', properties:row, geometry:g});
+      }
+      st.free();
+      if(!features.length) continue;
+      const c = firstCoord(features[0].geometry);
+      if(!inAus(c)){
+        if(unknownCrs) throw new Error('Unsupported coordinate system (srs '+code+'). Re-export the file as EPSG:4326 or GDA2020 (EPSG:7844).');
+        console.warn('First coordinate outside Australia', c);
+      }
+      out.push({name: table, fc:{type:'FeatureCollection', features}, bad});
+    }
+    return out;
+  } finally { db.close(); }
+}
+function xmlKids(el, name){ return Array.from(el.getElementsByTagName(name)); }
+function kmlCoords(txt){ return txt.trim().split(/\s+/).map(s=>s.split(',').map(Number)).filter(c=>c.length>=2&&!isNaN(c[0])&&!isNaN(c[1])).map(c=>[c[0],c[1]]); }
+function parseKml(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('This KML file could not be read');
+  const features = [];
+  xmlKids(doc, 'Placemark').forEach(pm => {
+    const props = {};
+    const nm = pm.getElementsByTagName('name')[0]; if(nm) props.name = nm.textContent.trim();
+    const ds = pm.getElementsByTagName('description')[0]; if(ds) props.description = ds.textContent.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,300);
+    xmlKids(pm, 'Data').forEach(d => { const v=d.getElementsByTagName('value')[0]; if(v) props[d.getAttribute('name')] = v.textContent.trim(); });
+    xmlKids(pm, 'SimpleData').forEach(d => { props[d.getAttribute('name')] = d.textContent.trim(); });
+    const geoms = [];
+    xmlKids(pm, 'LineString').forEach(ls => { const c=ls.getElementsByTagName('coordinates')[0]; if(c){ const cc=kmlCoords(c.textContent); if(cc.length>1) geoms.push({type:'LineString', coordinates:cc}); } });
+    xmlKids(pm, 'Polygon').forEach(pg => {
+      const rings = [];
+      xmlKids(pg, 'outerBoundaryIs').forEach(o => { const c=o.getElementsByTagName('coordinates')[0]; if(c) rings.unshift(kmlCoords(c.textContent)); });
+      xmlKids(pg, 'innerBoundaryIs').forEach(o => { const c=o.getElementsByTagName('coordinates')[0]; if(c) rings.push(kmlCoords(c.textContent)); });
+      if(rings.length && rings[0].length>2) geoms.push({type:'Polygon', coordinates:rings});
+    });
+    xmlKids(pm, 'Point').forEach(p => { const c=p.getElementsByTagName('coordinates')[0]; if(c){ const cc=kmlCoords(c.textContent); if(cc.length) geoms.push({type:'Point', coordinates:cc[0]}); } });
+    const track = [];
+    Array.from(pm.getElementsByTagName('*')).filter(e=>e.localName==='coord').forEach(c => { const v=c.textContent.trim().split(/\s+/).map(Number); if(v.length>=2) track.push([v[0],v[1]]); });
+    if(track.length>1) geoms.push({type:'LineString', coordinates:track});
+    geoms.forEach(g => features.push({type:'Feature', properties:props, geometry:g}));
+  });
+  return {type:'FeatureCollection', features};
+}
+function parseGpx(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('This GPX file could not be read');
+  const features = [];
+  const ll = p => [parseFloat(p.getAttribute('lon')), parseFloat(p.getAttribute('lat'))];
+  const nameOf = el => { const n = Array.from(el.children).find(c=>c.localName==='name'); return n ? n.textContent.trim() : undefined; };
+  xmlKids(doc, 'trk').forEach(t => {
+    const lines = xmlKids(t, 'trkseg').map(s => xmlKids(s, 'trkpt').map(ll)).filter(a=>a.length>1);
+    if(lines.length) features.push({type:'Feature', properties:{name:nameOf(t)}, geometry: lines.length===1 ? {type:'LineString', coordinates:lines[0]} : {type:'MultiLineString', coordinates:lines}});
+  });
+  xmlKids(doc, 'rte').forEach(r => { const c = xmlKids(r, 'rtept').map(ll); if(c.length>1) features.push({type:'Feature', properties:{name:nameOf(r)}, geometry:{type:'LineString', coordinates:c}}); });
+  xmlKids(doc, 'wpt').forEach(w => features.push({type:'Feature', properties:{name:nameOf(w)}, geometry:{type:'Point', coordinates:ll(w)}}));
+  return {type:'FeatureCollection', features};
+}
+function normGeoJSON(j){
+  if(j.type==='FeatureCollection') return j;
+  if(j.type==='Feature') return {type:'FeatureCollection', features:[j]};
+  if(j.type && j.coordinates) return {type:'FeatureCollection', features:[{type:'Feature', properties:{}, geometry:j}]};
+  throw new Error('Not a GeoJSON file');
+}
+
+$('#file').onchange = async e => {
+  const files = Array.from(e.target.files); e.target.value='';
+  for(const f of files) await importFile(f);
+};
+async function importFile(f){
+  const ext = (f.name.split('.').pop()||'').toLowerCase();
+  const base = f.name.replace(/\.[^.]+$/, '');
+  busy(true, 'Reading '+f.name+'…');
+  try{
+    let sets = [];
+    if(ext==='gpkg' || ext==='sqlite'){
+      busy(true, 'Opening GeoPackage…');
+      const parsed = await parseGpkg(await f.arrayBuffer());
+      sets = parsed.map(p => ({name: parsed.length>1 ? base+' · '+p.name : base, fc:p.fc, role:'network'}));
+    } else if(ext==='kml'){
+      sets = [{name:base, fc:parseKml(await f.text()), role:'route'}];
+    } else if(ext==='gpx'){
+      sets = [{name:base, fc:parseGpx(await f.text()), role:'route'}];
+    } else if(ext==='geojson' || ext==='json'){
+      sets = [{name:base, fc:normGeoJSON(JSON.parse(await f.text())), role:'network'}];
+    } else if(ext==='kmz'){
+      throw new Error('KMZ is zipped. Please download the route as KML or GPX instead.');
+    } else throw new Error('Unsupported file type .'+ext);
+    let added = 0;
+    for(const s of sets){
+      if(!s.fc.features.length) continue;
+      const hasLines = s.fc.features.some(f=>/Line|Polygon/.test(f.geometry&&f.geometry.type||''));
+      if(s.role==='route' && !hasLines) s.role='other';
+      const l = {id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), name:s.name, role:s.role,
+                 color: s.role==='route' ? '#00b3ff' : COLORS[layers.length % COLORS.length], visible:true, fc:s.fc};
+      if(s.role==='route' && layers.some(x=>x.role==='route')) l.color = '#e83fff';
+      addLayerToMap(l); layers.push(l); bringRoutesFront(); added++;
+      busy(true, 'Saving for offline use…');
+      await idbPut(meta(l));
+    }
+    if(!added) throw new Error('No map features found in '+f.name);
+    renderLayers(); updateStatus();
+    const lastL = layers[layers.length-1];
+    try{ const b=lastL.leaf.getBounds(); if(b.isValid()){ showView('map'); setTimeout(()=>{ following=false; updFollowBtn(); map.fitBounds(b,{padding:[30,30]}); },80); } }catch(e){}
+    toast('Imported '+f.name);
+  }catch(err){
+    console.error(err); toast(err.message || 'Import failed', 5000);
+  }finally{ busy(false); }
+}
+
+/* ---------- GPS ---------- */
+let pos = null, following = store.get('follow', true), meMarker = null, accCircle = null, watchId = null;
+const meIcon = h => L.divIcon({className:'me', iconSize:[30,30], iconAnchor:[15,15], html:
+  `<svg viewBox="0 0 30 30" style="transform:rotate(${h||0}deg)">${h==null ? '<circle cx="15" cy="15" r="9" fill="#4aa3ff" stroke="#fff" stroke-width="3"/>' : '<path d="M15 2 26 27 15 21 4 27z" fill="#4aa3ff" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>'}</svg>`});
+function updFollowBtn(){ $('#btnFollow').classList.toggle('on', following); store.set('follow', following); }
+$('#btnFollow').onclick = () => { following = true; updFollowBtn(); if(pos) map.setView([pos.lat,pos.lon], Math.max(map.getZoom(), 15)); else startGps(); };
+map.on('dragstart', () => { if(following){ following=false; updFollowBtn(); } });
+updFollowBtn();
+function gpsMsg(t){ const m=$('#gpsMsg'); m.textContent=t||''; m.classList.toggle('on', !!t); }
+function startGps(){
+  if(!('geolocation' in navigator)){ gpsMsg('This browser has no GPS access.'); return; }
+  if(!window.isSecureContext){ gpsMsg('GPS needs the app to be opened from an https:// address.'); }
+  if(watchId!=null) return;
+  watchId = navigator.geolocation.watchPosition(onPos, err => {
+    gpsMsg(err.code===1 ? 'Location permission denied. Allow location for this site to use live checks.' : 'Waiting for GPS…');
+    if(err.code===1){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+  }, {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+}
+let lastPosForHeading = null;
+function onPos(p){
+  gpsMsg('');
+  const c = p.coords;
+  let heading = (c.heading!=null && !isNaN(c.heading) && (c.speed||0) > 1.5) ? c.heading : null;
+  if(heading==null && lastPosForHeading && (c.speed||0) > 1.5){
+    const a=lastPosForHeading, y=Math.sin((c.longitude-a[0])*D2R)*Math.cos(c.latitude*D2R), x=Math.cos(a[1]*D2R)*Math.sin(c.latitude*D2R)-Math.sin(a[1]*D2R)*Math.cos(c.latitude*D2R)*Math.cos((c.longitude-a[0])*D2R);
+    heading = (Math.atan2(y,x)/D2R+360)%360;
+  }
+  lastPosForHeading = [c.longitude, c.latitude];
+  pos = {lat:c.latitude, lon:c.longitude, acc:c.accuracy, speed:c.speed, heading, t:p.timestamp};
+  const ll = [pos.lat, pos.lon];
+  if(!meMarker){ meMarker = L.marker(ll, {icon:meIcon(heading), interactive:false, zIndexOffset:1000}).addTo(map); accCircle = L.circle(ll, {radius:pos.acc, renderer:canvas, color:'#4aa3ff', weight:1, fillOpacity:.08, interactive:false}).addTo(map); if(following) map.setView(ll, 15); }
+  else { meMarker.setLatLng(ll); meMarker.setIcon(meIcon(heading)); accCircle.setLatLng(ll).setRadius(pos.acc); if(following) map.panTo(ll, {animate:true, duration:.5}); }
+  $('#speed b').textContent = c.speed!=null && !isNaN(c.speed) ? Math.round(c.speed*3.6) : '–';
+  updateStatus();
+}
+
+/* ---------- on-network & route status ---------- */
+const ON_NET_M = 40;   // tolerance for GPS + data offsets
+const OFF_ROUTE_M = 150;
+let wasOn = null, wasOnRoute = null;
+function checkPoint(p){
+  const nets = layers.filter(l=>l.visible && l.role==='network');
+  const hits = [], near = [];
+  for(const l of nets){ const r = queryIndex(l.idx, p, 2000); if(r.d <= ON_NET_M) hits.push({l, r}); else if(r.d < Infinity) near.push({l, r}); }
+  near.sort((a,b)=>a.r.d-b.r.d);
+  return {nets, hits, near};
+}
+function featName(l, fi){ const pr = (l.fc.features[fi]||{}).properties||{}; const k = Object.keys(pr).find(k=>/road.?name|^name$|street|route_name|rd_name|label/i.test(k)); return k ? pr[k] : ''; }
+function updateStatus(){
+  const pill = $('#netPill');
+  const nets = layers.filter(l=>l.visible && l.role==='network');
+  if(!nets.length){ pill.className='pill none'; pill.innerHTML='<div class="t">No network loaded</div><div class="s">Import NHVR network data in Layers</div>'; }
+  else if(!pos){ pill.className='pill none'; pill.innerHTML='<div class="t">Waiting for GPS</div><div class="s">'+nets.length+' network layer'+(nets.length>1?'s':'')+' loaded</div>'; }
+  else {
+    const res = checkPoint([pos.lon, pos.lat]);
+    if(res.hits.length){
+      const h = res.hits[0]; const rn = featName(h.l, h.r.fi);
+      pill.className='pill ok'; pill.innerHTML = '<div class="t">✓ On network</div><div class="s">'+esc(res.hits.map(x=>x.l.name).join(', '))+(rn?' · '+esc(rn):'')+'</div>';
+      if(wasOn===false) alertBeep(false);
+      wasOn = true;
+    } else {
+      const n = res.near[0];
+      pill.className='pill bad'; pill.innerHTML = '<div class="t">✕ Not on loaded network</div><div class="s">'+(n ? 'Nearest: '+esc(n.l.name)+' '+fmtDist(n.r.d) : 'No approved road within 2 km')+'</div>';
+      if(wasOn!==false) alertBeep(true);
+      wasOn = false;
+    }
+  }
+  // route
+  const routes = layers.filter(l=>l.visible && l.role==='route');
+  const rp = $('#routePill');
+  if(routes.length && pos){
+    let best = Infinity; for(const l of routes){ const r=queryIndex(l.idx, [pos.lon,pos.lat], 5000); if(r.d<best) best=r.d; }
+    rp.classList.add('on');
+    if(best <= OFF_ROUTE_M){ rp.className='pill on ok'; rp.textContent='On route'; wasOnRoute = true; }
+    else { rp.className='pill on bad'; rp.textContent='Off route '+(best<Infinity?fmtDist(best):'> 5 km'); if(wasOnRoute!==false) alertBeep(true); wasOnRoute=false; }
+  } else { rp.className='pill'; wasOnRoute=null; }
+}
+let actx = null;
+function alertBeep(bad){
+  try{ navigator.vibrate && navigator.vibrate(bad ? [300,150,300] : [120]); }catch(e){}
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain(); o.connect(g); g.connect(actx.destination);
+    o.frequency.value = bad ? 520 : 880; g.gain.value = .15; o.start(); o.stop(actx.currentTime + (bad?.45:.15));
+  }catch(e){}
+}
+document.addEventListener('click', () => { try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume && actx.resume(); }catch(e){} }, {once:true});
+
+// tap the map to check any spot
+map.on('click', e => {
+  const p = [e.latlng.lng, e.latlng.lat];
+  const res = checkPoint(p);
+  let h;
+  if(!res.nets.length) h = '<b>No network loaded</b><br><span class="muted">Import NHVR network data in Layers to check roads.</span>';
+  else if(res.hits.length) h = '<b style="color:#2fbf71">✓ On network</b><br>'+res.hits.map(x=>esc(x.l.name)+(featName(x.l,x.r.fi)?' · '+esc(featName(x.l,x.r.fi)):'')).join('<br>');
+  else h = '<b style="color:#ff8080">✕ Not on a loaded network</b>'+(res.near[0]?'<br>Nearest: '+esc(res.near[0].l.name)+' '+fmtDist(res.near[0].r.d):'');
+  L.popup().setLatLng(e.latlng).setContent(h).openOn(map);
+});
+
+/* ---------- wake lock ---------- */
+let wake = null, wantWake = store.get('wake', false);
+let setWake = async function(on){
+  wantWake = on; store.set('wake', on);
+  try{
+    if(on){ if(!('wakeLock' in navigator)) throw new Error(); wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', ()=>{ wake=null; $('#btnWake').classList.toggle('on', false); }); }
+    else if(wake){ await wake.release(); wake=null; }
+  }catch(e){ if(on) toast('Screen-on is not supported here. Set auto-lock to "Never" in phone settings.'); wantWake=false; store.set('wake', false); }
+  $('#btnWake').classList.toggle('on', !!wake);
+};
+$('#btnWake').onclick = () => setWake(!wake);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState==='visible' && wantWake && !wake) setWake(true); });
+
+/* ---------- vehicle profile ---------- */
+const tf = ['rego','type','mass','pbs','h','w','l','m'];
+const prof = store.get('truck', {type:'semi', mass:'GML'});
+tf.forEach(k => { const el=$('#t_'+k); if(prof[k]!=null) el.value=prof[k]; el.addEventListener('input', saveTruck); el.addEventListener('change', saveTruck); });
+function saveTruck(){ tf.forEach(k=>prof[k]=$('#t_'+k).value); store.set('truck', prof); renderTruck(); }
+function renderTruck(){
+  const h=parseFloat(prof.h), w=parseFloat(prof.w), l=parseFloat(prof.l);
+  const rigid = prof.type==='rigid';
+  const maxL = rigid ? 12.5 : 19;
+  const rows = [
+    ['Height', h, 4.3, 'm', 'Over 4.3 m needs a notice, permit or approved high-vehicle route'],
+    ['Width', w, 2.5, 'm', 'Over 2.5 m is oversize: notice or permit needed'],
+    ['Length', l, maxL, 'm', rigid ? 'Over 12.5 m (rigid) needs network access' : 'Over 19 m needs a restricted access network (e.g. B-double, road train)']
+  ];
+  const ga = rows.map(([n,v,lim,u,msg]) => {
+    if(isNaN(v)) return `<div class="chk na"><i>–</i><div>${n}: enter a value <span class="muted small">(general access ≤ ${lim} ${u})</span></div></div>`;
+    const ok = v <= lim + 1e-9;
+    return `<div class="chk ${ok?'ok':'bad'}"><i>${ok?'✓':'!'}</i><div>${n} ${v.toFixed(2)} ${u} ${ok?'is within':'is over'} general access ${lim} ${u}${ok?'':'<div class="small muted">'+msg+'</div>'}</div></div>`;
+  });
+  const restrictedType = ['bdouble','btriple','rt1','rt2','pbs','osom','spv'].includes(prof.type) || prof.mass!=='GML';
+  ga.push(`<div class="chk ${restrictedType?'bad':'ok'}"><i>${restrictedType?'!':'✓'}</i><div>${restrictedType ? 'Combination / mass scheme is restricted access. You must stay on an approved network or permit route.' : 'Vehicle type is usually general access at GML (check axle limits)'}</div></div>`);
+  $('#gaCheck').innerHTML = ga.join('');
+  const adv = {
+    rigid:'General access usually covers it. If over 4.3 m, check the 4.6 m high vehicle network.',
+    semi:'General access at GML. Download the HML or CML network if you run those schemes, and the 4.6 m network for high loads.',
+    truckdog:'General access up to 19 m. Download the 20 m / 23 m truck-and-dog network if longer.',
+    bdouble:'Download the B-double network (and HML B-double if on HML) for each state on your trip.',
+    btriple:'Download the B-triple / Type 1 road train network for each state.',
+    rt1:'Download the Type 1 road train (A-double) network.',
+    rt2:'Download the Type 2 road train (A-triple) network.',
+    pbs:'Download the PBS Level '+(prof.pbs||'?')+' network for your vehicle class.',
+    osom:'OSOM is mostly by notice or permit. Load your permit route as KML/GPX, and the relevant OSOM notice network if one exists.',
+    spv:'Download the special purpose vehicle network (e.g. cranes) or your permit route.'
+  }[prof.type] || '';
+  $('#netAdvice').textContent = adv + (prof.mass!=='GML' && !/HML|CML/.test(adv) ? ' Also load the '+prof.mass+' network.' : '');
+}
+renderTruck();
+
+/* ---------- fatigue: Standard Hours, solo ---------- */
+const MIN = 60000, H = 3600000;
+const RULES = [
+  {win:5.5*H, work:5.25*H, rest:15*MIN, label:'5½ h', restTxt:'15 min rest'},
+  {win:8*H,   work:7.5*H,  rest:30*MIN, label:'8 h',  restTxt:'30 min rest'},
+  {win:11*H,  work:10*H,   rest:60*MIN, label:'11 h', restTxt:'60 min rest'},
+  {win:24*H,  work:12*H,   rest:7*H,    label:'24 h', restTxt:'7 h stationary rest'}
+];
+let fev = store.get('fatigue', []); // [{t, s:'work'|'rest'}]
+function fState(){ return fev.length ? fev[fev.length-1].s : 'off'; }
+function periods(now){
+  const ps = [];
+  for(let i=0;i<fev.length;i++){
+    const a=fev[i].t, b = i+1<fev.length ? fev[i+1].t : now;
+    let s = fev[i].s;
+    if(s==='rest' && b-a < 15*MIN) s='work'; // counting rule: rest < 15 min counts as work
+    ps.push({a,b,s});
+  }
+  return ps;
+}
+function workIn(ps, from, to){ let w=0; for(const p of ps) if(p.s==='work'){ const a=Math.max(p.a,from), b=Math.min(p.b,to); if(b>a) w+=b-a; } return w; }
+function lastLongRest(ps, now){ // end time of most recent continuous rest >= 7h (or ongoing)
+  for(let i=ps.length-1;i>=0;i--){ if(ps[i].s==='rest' && ps[i].b-ps[i].a >= 7*H) return ps[i]; }
+  return null;
+}
+function fatigueCalc(now=Date.now()){
+  const ps = periods(now);
+  const rows = RULES.map(r => {
+    const used = workIn(ps, now-r.win, now);
+    return {r, used, left: r.work-used};
+  });
+  // time until next break due: smallest remaining across windows (approximation, assumes continuous work from now)
+  const minLeft = Math.min(...rows.map(x=>x.left));
+  const llr = lastLongRest(ps, now);
+  return {rows, minLeft, llr, ps};
+}
+function renderFatigue(){
+  const now = Date.now(); const st = fState(); const c = fatigueCalc(now);
+  const since = fev.length ? fev[fev.length-1].t : null;
+  const el = $('#fatStatus'); el.className = 'card '+st;
+  let next = '';
+  if(st==='work'){
+    next = c.minLeft <= 0 ? '<span style="color:var(--bad)">Rest now: work limit reached</span>' : 'Break due in <b>'+fmtDur(c.minLeft)+'</b> (by '+fmtTime(now+c.minLeft)+')';
+  } else if(st==='rest'){
+    const rl = now - since;
+    next = rl < 15*MIN ? 'Rest counts after 15 min. '+fmtDur(15*MIN-rl)+' to go.' : 'Resting '+fmtDur(rl)+'. Available work in next 5½ h: '+fmtDur(Math.max(0, c.minLeft));
+  } else next = 'Tap <b>Start work</b> when your shift begins.';
+  el.innerHTML = `<div class="st">${st==='work'?'WORKING':st==='rest'?'RESTING':'OFF DUTY'}</div>
+    <div class="since">${since?'since '+fmtTime(since)+' ('+fmtDur(now-since)+')':'No entries yet'}</div><div class="next">${next}</div>`;
+  $('#fWork').disabled = st==='work'; $('#fRest').disabled = st!=='work';
+  $('#fatRules').innerHTML = c.rows.map(x => {
+    const cls = x.left<=0?'bad':x.left<30*MIN?'warn':'ok';
+    const pct = Math.min(100, x.used/x.r.work*100);
+    return `<tr><td><b>${x.r.label}</b><div class="small muted">max ${fmtDur(x.r.work)} work, ${x.r.restTxt}</div></td>
+      <td>${fmtDur(x.used)}<div class="bar"><i style="width:${pct}%;background:${cls==='ok'?'var(--ok)':cls==='warn'?'var(--warn)':'var(--bad)'}"></i></div></td>
+      <td class="r ${cls}">${x.left<=0?'REST':fmtDur(x.left)}</td></tr>`;
+  }).join('');
+  $('#fatLong').textContent = c.llr ? 'Last 7 h+ continuous rest ended '+fmtTime(c.llr.b)+' ('+fmtDur(now-c.llr.b)+' ago)' + (now-c.llr.b > 17*H ? ' — a 7 h stationary rest is due within the 24 h period.' : '.') : 'No 7 h continuous rest logged yet. You need 7 h continuous stationary rest in any 24 h.';
+  const log = fev.slice(-40).map((e,i,arr) => { const end = i+1<arr.length ? arr[i+1].t : now; return `<div><span>${fmtTime(e.t)} ${e.s==='work'?'🟧 Work':'🟩 Rest'}</span><span class="muted">${fmtDur(end-e.t)}</span></div>`; }).reverse().join('');
+  $('#fatLog').innerHTML = log || '<div class="muted">Nothing logged.</div>';
+  renderFatPill(c, st);
+}
+function renderFatPill(c, st){
+  c = c || fatigueCalc(); st = st || fState();
+  const p = $('#fatPill'), dot = $('#fatDot');
+  if(st!=='work'){ p.className='pill'; dot.classList.remove('show'); return; }
+  const cls = c.minLeft<=0 ? 'bad' : c.minLeft < 15*MIN ? 'warn' : '';
+  p.className = 'pill on '+cls; p.textContent = c.minLeft<=0 ? 'REST NOW' : 'Break in '+fmtDur(c.minLeft);
+  dot.classList.toggle('show', c.minLeft < 15*MIN);
+  if(c.minLeft < 15*MIN && !renderFatPill._warned){ renderFatPill._warned = true; alertBeep(true); toast(c.minLeft<=0 ? 'Work limit reached — take a rest' : 'Break due in '+fmtDur(c.minLeft), 5000); }
+  if(c.minLeft >= 15*MIN) renderFatPill._warned = false;
+}
+function addEv(s){ fev.push({t:Date.now(), s}); const cut = Date.now()-48*H; while(fev.length>2 && fev[1].t < cut) fev.shift(); store.set('fatigue', fev); renderFatigue(); }
+$('#fWork').onclick = () => addEv('work');
+$('#fRest').onclick = () => addEv('rest');
+$('#fUndo').onclick = () => { fev.pop(); store.set('fatigue', fev); renderFatigue(); };
+$('#fClear').onclick = () => { $('#confirmClear').style.display='block'; };
+$('#fClearNo').onclick = () => { $('#confirmClear').style.display='none'; };
+$('#fClearYes').onclick = () => { fev=[]; store.set('fatigue', fev); $('#confirmClear').style.display='none'; renderFatigue(); };
+setInterval(() => { if($('#v-fatigue').classList.contains('active')) renderFatigue(); else renderFatPill(); }, 20000);
+
+/* ---------- boot ---------- */
+(async function boot(){
+  renderLayers(); renderFatigue();
+  const saved = await idbAll();
+  saved.forEach(rec => { const l = Object.assign({}, rec); addLayerToMap(l); layers.push(l); });
+  bringRoutesFront(); renderLayers(); updateStatus();
+  if(store.get('introDone', false)) startGps();
+  else { $('#intro').classList.add('on'); $('#introOk').onclick = () => { store.set('introDone', true); $('#intro').classList.remove('on'); startGps(); }; }
+  setTimeout(() => { if(wantWake) setWake(true); }, 0);
+})();
+/* ---------- Android app (Capacitor) integration ---------- */
+const CX = window.capacitorExports;
+const NATIVE = !!(CX && CX.Capacitor && CX.Capacitor.isNativePlatform());
+if(NATIVE){
+  document.body.classList.add('native');
+  // Android's picker can hide .gpkg files when filtered by type, so allow any file
+  $('#file').removeAttribute('accept');
+  // open web links in the phone's browser
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href^="http"]');
+    if(a){ e.preventDefault(); window.location.href = a.href; }
+  }, true);
+  const P = {KeepAwake: CX.registerPlugin('KeepAwake'), App: CX.registerPlugin('App')};
+  // keep screen on via native plugin
+  if(P.KeepAwake){
+    setWake = async function(on){
+      wantWake = on; store.set('wake', on);
+      try{ if(on) await P.KeepAwake.keepAwake(); else await P.KeepAwake.allowSleep(); wake = on ? {} : null; }
+      catch(e){ wake = null; toast('Could not keep the screen on'); }
+      $('#btnWake').classList.toggle('on', !!wake);
+    };
+  }
+  // hardware back button: go back to the map, then leave the app
+  if(P.App){
+    Promise.resolve().then(() => P.App.addListener('backButton', () => {
+      if(map.closePopup && document.querySelector('.leaflet-popup')){ map.closePopup(); return; }
+      if(!$('#v-map').classList.contains('active')) showView('map'); else P.App.minimizeApp().catch(() => P.App.exitApp());
+    })).catch(e => console.warn('Back button handler unavailable', e));
+  }
+}
+window.__app = {importFile, parseGpkg, parseKml, parseGpx, checkPoint, fatigueCalc, layers: () => layers, onPos, setFev: e => { fev = e; store.set('fatigue', fev); renderFatigue(); }};
+</script>
+</body>
+</html>
